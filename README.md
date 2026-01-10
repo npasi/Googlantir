@@ -145,12 +145,6 @@ For detailed troubleshooting, see [`usage.txt`](usage.txt).
 
 ---
 
-## 📄 License
-
-MIT License – Do whatever you want with this. If you make money, great. If you lose money, not my problem.
-
----
-
 <div align="center">
 
 **Built because I wanted to understand TimesFM and couldn't find a decent UI for it.**
