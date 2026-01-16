@@ -11,11 +11,7 @@ import data
 
 # --- 1. BRIDGE FUNCTION ---
 def get_ticker_data(ticker, period, interval):
-    """
-    Funzione ponte: l'UI chiede i dati a Forecaster, 
-    Forecaster li chiede a Data.
-    Manteniamo il nome 'get_ticker_data' per coerenza con app.py.
-    """
+  
     return data.get_ticker_data(ticker, period, interval)
 
 # --- 2. LOAD MODEL ---
@@ -81,9 +77,8 @@ def generate_future_dates(start_date, num_periods, interval_code, is_crypto):
         dates.append(current)
         count += 1
     return pd.DatetimeIndex(dates)
-
-# --- 5. CHART CREATION ---
-def create_trading_chart(time_series, forecast_data, ticker, forecasting_horizon, interval_code, colors_dict):
+# --- CHART CREATION ---
+def create_trading_chart(time_series, forecast_data, ticker, forecasting_horizon, interval_code, colors_dict, auto_scale_y=False):
     last_date = time_series.index[-1]
     is_crypto = "-USD" in ticker or "-EUR" in ticker
     
@@ -91,9 +86,41 @@ def create_trading_chart(time_series, forecast_data, ticker, forecasting_horizon
 
     if interval_code == "1h":
         x_fmt = '%d %b %H:00'
+        zoom_lookback = timedelta(days=5) # Zoom su 5 giorni per orario
+    elif interval_code == "1wk":
+        x_fmt = '%d %b %Y'
+        zoom_lookback = timedelta(weeks=52) # Zoom su 1 anno per macro
     else:
         x_fmt = '%d %b %Y'
-    
+        zoom_lookback = timedelta(days=90) # Zoom su 3 mesi per daily
+
+    # Calcolo data inizio zoom
+    start_zoom = time_series.index[-1] - zoom_lookback
+    if start_zoom < time_series.index[0]:
+        start_zoom = time_series.index[0]
+
+    # --- LOGICA SMART SCALING Y ---
+    y_range_override = None
+    if auto_scale_y:
+        # 1. Prendiamo solo la parte di storico che sarà visibile
+        visible_history = time_series[time_series.index >= start_zoom]
+        
+        # 2. Uniamo i valori visibili (storico recente + previsione)
+        # Usiamo p90 e p10 per assicurarci che anche le bande siano dentro
+        all_visible_values = np.concatenate([
+            visible_history.values.flatten(),
+            forecast_data['p90'],
+            forecast_data['p10']
+        ])
+        
+        # 3. Troviamo min e max
+        local_min = np.min(all_visible_values)
+        local_max = np.max(all_visible_values)
+        
+        # 4. Aggiungiamo un cuscinetto (padding) del 5% sopra e sotto
+        padding = (local_max - local_min) * 0.05
+        y_range_override = [local_min - padding, local_max + padding]
+
     fig = go.Figure()
 
     # Bande di confidenza
@@ -144,22 +171,18 @@ def create_trading_chart(time_series, forecast_data, ticker, forecasting_horizon
             type="date", showgrid=True, gridcolor='#f1f3f4',
             rangeslider=dict(visible=False),
             tickfont=dict(color='#202124'), title_font=dict(color='#202124'),
-            rangebreaks=rangebreaks 
+            rangebreaks=rangebreaks,
+            range=[start_zoom, forecast_dates[-1]] # Range X forzato qui
         ),
-        yaxis=dict(showgrid=True, gridcolor='#f1f3f4', zerolinecolor=colors_dict['border'], tickfont=dict(color='#202124'), title_font=dict(color='#202124'))
+        yaxis=dict(
+            showgrid=True, 
+            gridcolor='#f1f3f4', 
+            zerolinecolor=colors_dict['border'], 
+            tickfont=dict(color='#202124'), 
+            title_font=dict(color='#202124'),
+            range=y_range_override, # Range Y dinamico applicato qui se presente
+            fixedrange=False # Permette all'utente di modificare lo zoom trascinando
+        )
     )
     
-    # Zoom
-    if interval_code == "1h":
-        zoom_lookback = timedelta(days=5)
-    elif interval_code == "1wk":
-        zoom_lookback = timedelta(weeks=52) 
-    else: 
-        zoom_lookback = timedelta(days=90)
-
-    start_zoom = time_series.index[-1] - zoom_lookback
-    if start_zoom < time_series.index[0]:
-        start_zoom = time_series.index[0]
-        
-    fig.update_xaxes(range=[start_zoom, forecast_dates[-1]])
     return fig
