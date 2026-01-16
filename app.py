@@ -416,6 +416,11 @@ with st.sidebar:
     horizon = st.slider(f"Horizon Length: {unit_label} to predict", 1, max_horizon, default_horizon)
     context = st.slider(f"Context Length: Memory Span ({unit_label})", 32, 1024, default_context, step=16)
     
+    # --- VISUALS SECTION ---
+    st.markdown("---")
+    st.markdown(generate_colored_text("Visuals", font_size="1.2rem"), unsafe_allow_html=True)
+    smart_scale = st.checkbox("🔍 Smart Y-Axis Scale", value=True, help="Automatically zoom the Y-axis to fit the recent price action and forecast, ignoring distant history.")
+    
     st.markdown("---")
     run = st.button("FIRE") 
 
@@ -429,13 +434,11 @@ if run:
             is_hourly = (interval_code == "1h")
             tfm_freq_token = 1 if is_hourly else 2
             
-           
             mapped_period = period
             if period == "1 week": mapped_period = "5d"
             if period == "2 weeks": mapped_period = "1mo"
             
             ts_data = forecaster.get_ticker_data(ticker, mapped_period, interval_code)
-            
             
             if ts_data is None or ts_data.empty:
                 st.error(f"❌ **Ticker '{ticker}' not found or no data available.** Please check the symbol (e.g., use 'BTC-USD' for crypto, 'GOOGL' for stocks).")
@@ -445,7 +448,6 @@ if run:
                     cutoff = ts_data.index[-1] - timedelta(weeks=2)
                     ts_data = ts_data[ts_data.index >= cutoff]
 
-       
                 if len(ts_data) > 30:
                     model = get_model(context, horizon)
                     res = forecaster.run_forecast_logic(ts_data, model, context, horizon, tfm_freq_token)
@@ -477,7 +479,7 @@ if run:
                     
                     st.caption("💡 **Tip:** If the chart looks squeezed, click the **'Autoscale'** or **'Reset Axes'** button in the chart toolbar above.")
                     
-                    fig = forecaster.create_trading_chart(ts_data, res, ticker, horizon, interval_code, COLORS)
+                    fig = forecaster.create_trading_chart(ts_data, res, ticker, horizon, interval_code, COLORS, auto_scale_y=smart_scale)
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.error(f"⚠️ **Not enough historical data for '{ticker}'.** TimesFM needs at least 35 candles to establish a trend context (approx 5 trading days for hourly data).")
